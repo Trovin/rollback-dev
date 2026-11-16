@@ -1,0 +1,97 @@
+name: Build and deploy site
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'site/**'
+      - Dockerfile
+      - .dockerignore
+      - .github/workflows/deploy.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Choose image version
+        id: version
+        shell: bash
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          revision="$(git rev-parse HEAD)"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "tag=$image:sha-$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        id: build
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.version.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Verify Kubernetes can pull the image
+        env:
+          IMAGE: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          anonymous_config="$(mktemp -d)"
+          if ! DOCKER_CONFIG="$anonymous_config" docker manifest inspect "$IMAGE" > /dev/null; then
+            echo '::error::Open the rollback-dev package settings on GitHub and change visibility to Public, then rerun this workflow. The live deployment has not been changed.'
+            exit 1
+          fi
+
+      - name: Update GitOps image digest
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}@${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            git fetch origin dev
+            if ! git diff --quiet HEAD origin/dev -- site Dockerfile .dockerignore .github/workflows/deploy.yaml; then
+              echo 'Newer site changes exist; the next workflow will deploy them.'
+              exit 0
+            fi
+            git checkout -B deploy-manifest origin/dev
+            python - <<'PY'
+          import os
+          import pathlib
+          import re
+          path = pathlib.Path('k8s/demo/deployment.yaml')
+          content, count = re.subn(r'(?m)^          image: .+$', '          image: ' + os.environ['IMAGE'], path.read_text())
+          if count != 1:
+              raise SystemExit('Expected exactly one nginx image field')
+          path.write_text(content)
+          PY
+            git add k8s/demo/deployment.yaml
+            if git diff --cached --quiet; then exit 0; fi
+            git commit -m 'Deploy site image from GitHub Actions'
+            if git push origin HEAD:dev; then exit 0; fi
+          done
+          echo '::error::Could not update dev after three attempts.'
+          exit 1
