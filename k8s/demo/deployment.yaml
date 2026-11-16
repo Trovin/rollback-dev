@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: nginx:stable-alpine
+          image: ghcr.io/trovin/rollback-dev@sha256:c80ef2cad4a936a7e91f0a0b1fc44a8076eb62896b1b7811ce7920464f04f067
           ports:
             - containerPort: 80
           readinessProbe:
