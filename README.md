@@ -22,10 +22,12 @@ and pause for manual promotion before proceeding to 100%. Without a traffic
 router, the weight is approximated by replica counts, not exact request routing.
 The Rollout manifest is in `k8s/demo/deployment.yaml`.
 
-If the Rollouts controller v1.10.2 is already installed but its Rollout CRD is missing:
+If the Rollouts controller v1.10.2 is already installed but its Rollout or AnalysisRun CRDs are missing:
 
 ```powershell
 kubectl --context docker-desktop apply --server-side -f https://raw.githubusercontent.com/argoproj/argo-rollouts/v1.10.2/manifests/crds/rollout-crd.yaml
+kubectl --context docker-desktop apply --server-side -f https://raw.githubusercontent.com/argoproj/argo-rollouts/v1.10.2/manifests/crds/analysis-run-crd.yaml
+kubectl --context docker-desktop -n argo-rollouts rollout restart deployment/argo-rollouts
 ```
 
 Inspect the rollout and its pods:
