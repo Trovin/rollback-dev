@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rollback-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Trovin/rollback-dev.git
+    targetRevision: dev
+    path: k8s/demo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rollback-dev
+  syncPolicy:
+    automated:
+      enabled: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
