@@ -15,7 +15,7 @@ publishes `ghcr.io/trovin/rollback-dev`, and commits its immutable image digest
 to the Rollout manifest. Argo CD then deploys it automatically, stopping at
 the configured 25% canary pause until you promote it.
 
-The first publication creates a private GHCR package. Open
+If the anonymous-pull check fails because the GHCR package is private, open
 https://github.com/users/Trovin/packages/container/rollback-dev/settings and
 change its visibility to Public so Kubernetes can pull it without credentials.
 Then rerun the failed workflow from the Actions tab. Until anonymous pulling
